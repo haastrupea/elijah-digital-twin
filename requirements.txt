@@ -1,0 +1,15 @@
+# Core app & UI
+gradio==6.11.0
+python-dotenv==1.2.2
+
+# LLM (OpenRouter-compatible OpenAI client)
+openai==2.30.0
+
+# RAG / vector store
+chromadb==1.5.5
+
+# Document ingestion (optional scripts)
+pypdf==6.9.2
+
+# HTTP (Pushover notifications)
+requests==2.33.1
