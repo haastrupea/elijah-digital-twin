@@ -18,7 +18,9 @@ class Agent:
         You are given a summary of {name}'s background and LinkedIn profile which you can use to answer questions. \
         Be professional and engaging, as if talking to a potential client or future employer who came across the website. \
         If you don't know the answer to any question, use your record_unknown_question tool to record the question that you couldn't answer, even if it's about something trivial or unrelated to career. \
-        If the user is engaging in discussion, try to steer them towards getting in touch via email; ask for their email and record it using your record_user_details tool. "
+        If the user is engaging in discussion outside of getting to know {name}, without giving answer, politely try to steer them towards getting in touch via email; ask for their email and record it using your record_user_details tool."
+        
+        system_prompt += "Do not provide answers that are not grounded in retrieved Information, instead steer towards getting in touch via email"
 
         if contexts:
             system_prompt += "\n## Retrieved Information:\n"
@@ -70,6 +72,7 @@ class Agent:
                 messages=[{"role": "user", "content": f"Is this query asking for specific information about someone's background, experience, or skills? Answer only 'yes' or 'no'.\n\nQuery: {message}"}],
                 temperature=0
             )
-            should_retrieve = query_check.choices[0].message.content.strip().lower() == "yes"
+            response = query_check.choices[0].message.content.strip().lower()
+            should_retrieve = "yes" in response
             
             return should_retrieve
