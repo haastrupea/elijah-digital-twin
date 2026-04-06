@@ -43,7 +43,6 @@ class DigitalAsistant:
                 self.pipeline.chat,
                 textbox= gr.Textbox(placeholder="Ask me something..."),
                 examples= self.examples,
-                type="messages"
             )
 
         ui.launch(share=False, server_name= "0.0.0.0")
