@@ -22,10 +22,10 @@ class Pipeline:
         name = config.get('name', "Elijah HAASTRUP")
         self.agent = Agent(llm_client, tools, name)
 
-        project_root = Path(__file__).parent.parent
-        db_path = str(Path(project_root).resolve() / 'data')
+        default_project_root = Path(__file__).resolve().parent.parent
+        project_root:Path = config.get("project_root", default_project_root)
         # rag system setup
-        self.rag = RAGSystem(db_path)
+        self.rag = RAGSystem(project_root)
 
 
     def parse_history_to_message (self, history: list):
@@ -53,7 +53,8 @@ class Pipeline:
         # get rag contexts
         if should_retrieve:
             print("[RAG] Using RAG for this query")
-            rag_context = self.rag.retrieve( query, top_k=self.config["top_k"] )
+            top_k = self.config.get("top_k",5)
+            rag_context = self.rag.retrieve( query, top_k= top_k )
             if rag_context:
                 contexts.extend(rag_context)
 
