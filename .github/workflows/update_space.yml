@@ -21,9 +21,6 @@ jobs:
     - name: Install Gradio
       run: python -m pip install gradio==6.0.1
 
-    - name: Install Hugging face hub
-      run: python -m pip install huggingface-hub
-
     - name: Log in to Hugging Face
       run: python -c 'import huggingface_hub; huggingface_hub.login(token="${{ secrets.hf_token }}")'
 
