@@ -20,8 +20,10 @@ class Pipeline:
         notifier = PushOver(config)
         tools = Tools(notifier)
         name = config.get('name', "Elijah HAASTRUP")
-        self.agent = Agent(llm_client, tools, name)
+        chat_model = config.get('chat_model', "gpt-4o-mini")
 
+        self.agent = Agent(llm_client, tools, name, chat_model)
+       
         default_project_root = Path(__file__).resolve().parent.parent
         project_root:Path = config.get("project_root", default_project_root)
         # rag system setup
@@ -39,13 +41,21 @@ class Pipeline:
                 if assitant_message:
                     normalised_history.append({"role": "assistant", "content": assitant_message })
             else:
-                normalised_history = history
+                role = item.get('role', '')
+                content = item.get('content', '')
+                if not isinstance(content, list):
+                    return history
+
+                contentType = content[0].get('type', 'text')
+                content = content[0].get(contentType, '')
+                if content:
+                    normalised_history.append({"role": role, "content": content })
 
         return normalised_history
 
     def chat(self, query: str, history: list) -> str:
 
-
+        #prevent too long a token
         contexts = []
 
         should_retrieve = self.agent.should_use_rag_with_Query(query)
@@ -58,10 +68,19 @@ class Pipeline:
             if rag_context:
                 contexts.extend(rag_context)
 
+        query_summary = self.agent.sumarize_long_query(query)
+        user_prompt = f"Question: \n {query_summary}"
+        if contexts:
+            user_prompt += "\n## Retrieved Information context:\n"
+            for doc in contexts:
+                user_prompt += f"\n[{doc['source']}]:\n{doc['text']}\n"
+
         normalised_history = self.parse_history_to_message(history)
-        messages =  normalised_history + [{"role": "user", "content": query}]
+        messages =  normalised_history + [{"role": "user", "content": user_prompt}]
 
         # call agent
-        response = self.agent.llm_call(messages, contexts)
+        response = self.agent.llm_call(messages)
+        print(f'Message-observability(query): {query_summary}\n')
+        print(f'Message-observability(response): {response}\n')
 
         return response

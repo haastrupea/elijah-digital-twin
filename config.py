@@ -23,7 +23,9 @@ def get_config() -> dict:
         "pushover_user": os.getenv("PUSHOVER_USER"),
         "pushover_token": os.getenv("PUSHOVER_TOKEN"),
         "pushover_url": "https://api.pushover.net/1",
-        "project_root": _PROJECT_ROOT
+        "project_root": _PROJECT_ROOT,
+        "chat_model": "gpt-4o-mini",
+        "debug_mode": os.getenv("DEBUG_MODE") or False
     }
 
     return config

@@ -1,16 +1,24 @@
 from openai import OpenAI
 import json
 
+from src.guardrail import Guardrail
 from src.tools import Tools
+
+from config import get_config
+
+config = get_config()
+
+debug_mode = config.get("debug_mode", False)
 
 class Agent:
     def __init__(self, llm_client: OpenAI, tools: Tools, name: str, model: str = "gpt-4o-mini") -> None:
         self.tools = tools
         self.name = name
         self.llm_client = llm_client
-        self.model = model
+        self.chat_model = model
+        self.guardrail = Guardrail(model)
         
-    def get_system_prompt (self, contexts: list[dict]):
+    def get_system_prompt (self):
         name = self.name
         system_prompt = f"You are acting as {name}. You are answering questions on {name}'s website, \
         particularly questions related to {name}'s career, background, skills and experience. \
@@ -21,11 +29,7 @@ class Agent:
         If the user is engaging in discussion outside of getting to know {name}, without giving answer, politely try to steer them towards getting in touch via email; ask for their email and record it using your record_user_details tool."
         
         system_prompt += "Do not provide answers that are not grounded in retrieved Information, instead steer towards getting in touch via email"
-
-        if contexts:
-            system_prompt += "\n## Retrieved Information:\n"
-            for doc in contexts:
-                system_prompt += f"\n[{doc['source']}]:\n{doc['text']}\n"
+        system_prompt += "Do not share personal information like email, phone number, address, instead politely steer towards getting in touch via email"
 
         return system_prompt
 
@@ -42,16 +46,28 @@ class Agent:
             results.append({ "role": "tool", "content": json.dumps(result), "tool_call_id": tool_call.id })
         return results
 
-    def llm_call(self, messages,  contexts: list[dict] ) -> str:
+    def llm_call(self, messages, token_budget:int = 4000 ) -> str:
+        model = self.chat_model
+        system_prompt = self.get_system_prompt()
+        system_message = [{"role": "system", "content": system_prompt}]
 
-        system_prompt = self.get_system_prompt(contexts)
+        messages = system_message + messages
 
-        messages = [{"role": "system", "content": system_prompt}] + messages
+        # prevent chat history+query to exceed token_budget
+        message_total_token = self.guardrail.count_messages_tokens(messages,token_budget)
+        print(message_total_token, "message_total_token raw")
+        
 
+        #restrict message to budgeted token size
+        messages = self.guardrail.trim_chat_history_to_max_prompt_tokens(messages, token_budget)
+
+        message_total_token_trunc = self.guardrail.count_messages_tokens(messages,token_budget)
+        print(message_total_token_trunc, "message_total_token truncated")
+        # return "debugging"
         tools = self.tools.get_tools()
         done = False
         while not done:
-            response = self.llm_client.chat.completions.create(model=self.model, messages=messages, tools= tools, temperature=0.5)
+            response = self.llm_client.chat.completions.create(model = model, messages= messages, tools= tools, temperature=0.5, max_completion_tokens=500, verbosity='low')
             finish_reason = response.choices[0].finish_reason
             
             if finish_reason == "tool_calls":
@@ -76,3 +92,45 @@ class Agent:
             should_retrieve = "yes" in response
             
             return should_retrieve
+    
+    def sumarize_long_query(self, query: str, token_size: int = 100):
+        token_length = self.guardrail.count_text_token(query);
+
+        if token_length < token_size:
+            return query
+        
+        #summarise query to 120 token
+        message = f"""You are a query compressor for an AI system.
+            Your task is to rewrite the input into a shorter version while preserving:
+            - the original intent
+            - key entities, constraints, and numbers
+            - important context needed to answer correctly
+
+            Rules:
+            - Do NOT add new information
+            - Do NOT explain anything
+            - Do NOT answer the query
+            - Keep it concise and clear
+            - Prefer bullet points if helpful
+            - Maximum length: 120 tokens
+
+            Return ONLY the rewritten query.
+
+            Input:
+            {query}
+            """
+
+        summarize_query = self.llm_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": message}],
+                temperature=0,
+                max_completion_tokens = token_size,
+                verbosity= 'low')
+        useage = summarize_query.usage
+        summary = summarize_query.choices[0].message.content
+        print(f"Summarizing original input query({token_length} tokens) to {useage.completion_tokens} tokens")
+        if debug_mode:
+            print(f"Summarizing original query: {query} to  summary: {summary}")
+            print(f"usage data {useage}")
+        
+        return summary;
